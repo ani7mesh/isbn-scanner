@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Book Scanner - ISBN Capture</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <rect x="4" y="4" width="24" height="24" rx="4" fill="#6366f1" opacity="0.2"/>
+                        <path d="M12 8v16M20 8v16M8 12h16M8 20h16" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <h1>Book Scanner</h1>
+                </div>
+                <div class="header-actions">
+                    <button id="themeToggle" class="icon-btn" title="Toggle theme">
+                        <svg id="themeIcon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Scanner Section -->
+            <section class="scanner-section">
+                <div class="scanner-container">
+                    <div id="scannerPlaceholder" class="scanner-placeholder">
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                            <rect x="8" y="8" width="48" height="48" rx="8" stroke="#6366f1" stroke-width="2"/>
+                            <path d="M24 24v16M40 24v16M16 32h32" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <p>Camera preview will appear here</p>
+                        <button id="startScanBtn" class="primary-btn">Start Scanner</button>
+                    </div>
+                    <div id="scannerActive" class="scanner-active" style="display: none;">
+                        <div id="cameraContainer" class="camera-container">
+                            <div id="scanOverlay" class="scan-overlay">
+                                <div class="scan-corner top-left"></div>
+                                <div class="scan-corner top-right"></div>
+                                <div class="scan-corner bottom-left"></div>
+                                <div class="scan-corner bottom-right"></div>
+                                <div class="scan-line"></div>
+                            </div>
+                            <div class="scanner-status">
+                                <span id="scannerStatusText">Initializing camera...</span>
+                                <div id="scannerStatusDot" class="status-dot"></div>
+                            </div>
+                        </div>
+                        <div class="scanner-controls">
+                            <button id="stopScanBtn" class="secondary-btn">Stop Scanner</button>
+                            <button id="manualEntryBtn" class="secondary-btn">Manual Entry</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Entry Modal -->
+                <div id="manualModal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <h3>Enter ISBN Manually</h3>
+                        <input type="text" id="manualIsbnInput" placeholder="Enter ISBN number" inputmode="numeric">
+                        <div class="modal-actions">
+                            <button id="cancelManualBtn" class="secondary-btn">Cancel</button>
+                            <button id="confirmManualBtn" class="primary-btn">Add ISBN</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Books List Section -->
+            <section class="books-section">
+                <div class="books-header">
+                    <h2>Scanned Books</h2>
+                    <div class="books-stats">
+                        <span id="bookCount" class="stat-badge">0 books</span>
+                        <button id="clearAllBtn" class="danger-btn" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M2 4h12M5.333 4V2.667a1 1 0 011-1h3.334a1 1 0 011 1V4m2 0v8.667a1.333 1.333 0 01-1.333 1.333H5.667a1.333 1.333 0 01-1.334-1.333V4h10z"/>
+                            </svg>
+                            Clear All
+                        </button>
+                    </div>
+                </div>
+
+                <div id="booksList" class="books-list">
+                    <div class="empty-state" id="emptyState">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <rect x="6" y="6" width="36" height="36" rx="6" stroke="#6366f1" stroke-width="2" opacity="0.5"/>
+                            <path d="M18 18v12M30 18v12M12 24h24" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                        </svg>
+                        <p>Scan your first book to begin</p>
+                        <p class="subtitle">ISBNs will appear here automatically</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Export Section -->
+        <footer class="footer">
+            <div class="export-actions">
+                <button id="copyAllBtn" class="primary-btn" disabled>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 2a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V2z"/>
+                        <path d="M2 6a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-1"/>
+                    </svg>
+                    Copy All ISBNs
+                </button>
+                <button id="emailBtn" class="primary-btn" disabled>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M0 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H2a2 2 0 01-2-2V4z"/>
+                        <path d="M0 4l8 6 8-6"/>
+                    </svg>
+                    Email List
+                </button>
+                <button id="exportCsvBtn" class="primary-btn" disabled>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 1a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V2a1 1 0 00-1-1H2z"/>
+                        <path d="M4 5h8M4 8h8M4 11h5"/>
+                    </svg>
+                    Export CSV
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
