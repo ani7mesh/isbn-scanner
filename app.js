@@ -72,8 +72,6 @@ class BookScannerApp {
         try {
             this.scannerPlaceholder.style.display = 'none';
             this.scannerActive.style.display = 'block';
-            
-            // Simple approach - just use HTML5-QRCode
             await this.startHtml5QrScanner();
             this.isScanning = true;
         } catch (error) {
@@ -85,17 +83,13 @@ class BookScannerApp {
     async startHtml5QrScanner() {
         this.updateScannerStatus('Starting camera...');
         
-        // Check if library is loaded
         if (typeof Html5Qrcode === 'undefined') {
             console.error('Html5Qrcode library not loaded!');
             this.updateScannerStatus('Scanner library not loaded. Check internet connection.');
             return;
         }
         
-        // Clear container
         this.cameraContainer.innerHTML = '';
-        
-        // Create scanner instance
         this.scanner = new Html5Qrcode('cameraContainer');
         
         const config = {
@@ -111,7 +105,7 @@ class BookScannerApp {
                     console.log('Scanned:', decodedText);
                     this.handleScannedISBN(decodedText);
                 },
-                () => {} // ignore errors
+                () => {}
             );
             
             this.updateScannerStatus('Scanner active - point at ISBN barcode');
@@ -125,7 +119,6 @@ class BookScannerApp {
         if (this.scanner) {
             this.scanner.stop().then(() => {
                 this.scanner.clear();
-                console.log('Scanner stopped');
             }).catch(err => {
                 console.warn('Stop error:', err);
             });
@@ -140,18 +133,18 @@ class BookScannerApp {
     handleScannedISBN(rawValue) {
         console.log('Raw scan value:', rawValue);
         
-        // SIMPLE ISBN CLEANING - just take numbers
+        // Simple cleaning - just take numbers
         let isbn = rawValue.replace(/[^0-9]/g, '');
         
         console.log('Cleaned to:', isbn);
         
-        // Remove leading '978' if it's actually a UPC code
-        if (isbn.length === 12 && (isbn.startsWith('978') || isbn.startsWith('979'))) {
-            // Calculate check digit and add it
+        // If 12 digits (UPC-A), add check digit
+        if (isbn.length === 12) {
             isbn = this.calculateCheckDigit(isbn);
+            console.log('Added check digit:', isbn);
         }
         
-        // Accept any ISBN that's 10-13 digits
+        // Accept 10-13 digit ISBNs
         if (isbn.length < 10 || isbn.length > 13) {
             console.warn('Invalid ISBN length:', isbn.length);
             this.showToast('Invalid ISBN: ' + rawValue);
@@ -176,10 +169,9 @@ class BookScannerApp {
         this.saveBooks();
         this.renderBooks();
         
-        // Try to lookup
-        this.lookupBook(isbn, this.books.length - 1);
+        // Try to lookup with multiple fallbacks
+        this.lookupBookDetails(isbn, this.books.length - 1);
         
-        // Feedback
         if (navigator.vibrate) navigator.vibrate(100);
         this.showToast('ISBN: ' + isbn);
     }
@@ -193,60 +185,112 @@ class BookScannerApp {
         return isbn12 + checkDigit;
     }
     
-    // ==================== BOOK LOOKUP ====================
-    async lookupBook(isbn, index) {
-        console.log('Looking up:', isbn);
+    // ==================== BOOK LOOKUP (FIXED) ====================
+    async lookupBookDetails(isbn, index) {
+        console.log('Looking up ISBN:', isbn);
         
-        // Try Google Books first
+        // Try multiple sources
+        const sources = [
+            this.lookupGoogleBooks.bind(this),
+            this.lookupOpenLibrary.bind(this),
+            this.lookupOpenLibraryCover.bind(this)
+        ];
+        
+        for (const source of sources) {
+            try {
+                const result = await source(isbn);
+                if (result && result.title) {
+                    console.log('Found via source:', result.source);
+                    this.books[index].title = result.title;
+                    this.books[index].author = result.author;
+                    this.saveBooks();
+                    this.renderBooks();
+                    return;
+                }
+            } catch (error) {
+                console.warn('Source failed:', error.message);
+                continue;
+            }
+        }
+        
+        console.log('All lookups failed for:', isbn);
+        this.books[index].title = 'Unknown title (ISBN only)';
+        this.saveBooks();
+        this.renderBooks();
+    }
+    
+    async lookupGoogleBooks(isbn) {
         try {
             const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
-            console.log('Fetching:', url);
+            console.log('Trying Google Books:', url);
             
             const response = await fetch(url);
-            const data = await response.json();
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
-            console.log('Google Books response:', data);
+            const data = await response.json();
+            console.log('Google Books data:', data);
             
             if (data.items && data.items[0]) {
                 const book = data.items[0].volumeInfo;
-                this.books[index].title = book.title || 'Unknown';
-                this.books[index].author = book.authors ? book.authors[0] : 'Unknown';
-                this.saveBooks();
-                this.renderBooks();
-                console.log('Found:', book.title);
-                return;
+                return {
+                    title: book.title || 'Unknown',
+                    author: book.authors ? book.authors[0] : 'Unknown',
+                    source: 'Google Books'
+                };
             }
         } catch (error) {
-            console.warn('Google Books failed:', error);
+            console.warn('Google Books error:', error);
         }
-        
-        // Try Open Library
+        return null;
+    }
+    
+    async lookupOpenLibrary(isbn) {
         try {
             const url = `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&jscmd=data&format=json`;
-            console.log('Fetching:', url);
+            console.log('Trying Open Library:', url);
             
             const response = await fetch(url);
-            const data = await response.json();
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
-            console.log('Open Library response:', data);
+            const data = await response.json();
+            console.log('Open Library data:', data);
             
             const key = `ISBN:${isbn}`;
             if (data[key] && data[key].title) {
-                this.books[index].title = data[key].title;
-                this.books[index].author = data[key].authors ? data[key].authors[0].name : 'Unknown';
-                this.saveBooks();
-                this.renderBooks();
-                console.log('Found:', data[key].title);
-                return;
+                return {
+                    title: data[key].title,
+                    author: data[key].authors ? data[key].authors[0].name : 'Unknown',
+                    source: 'Open Library'
+                };
             }
         } catch (error) {
-            console.warn('Open Library failed:', error);
+            console.warn('Open Library error:', error);
         }
-        
-        console.log('No lookup results for:', isbn);
-        this.books[index].title = 'Not found - will remain as ISBN only';
-        this.saveBooks();
-        this.renderBooks();
+        return null;
+    }
+    
+    async lookupOpenLibraryCover(isbn) {
+        try {
+            const url = `https://covers.openlibrary.org/b/isbn/${isbn}-L.json`;
+            console.log('Trying Open Library Cover:', url);
+            
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const data = await response.json();
+            console.log('Open Library Cover data:', data);
+            
+            if (data && data.title) {
+                return {
+                    title: data.title,
+                    author: data.authors ? data.authors[0].name : 'Unknown',
+                    source: 'Open Library Cover'
+                };
+            }
+        } catch (error) {
+            console.warn('Open Library Cover error:', error);
+        }
+        return null;
     }
     
     // ==================== UI METHODS ====================
@@ -275,8 +319,8 @@ class BookScannerApp {
                     ${book.author ? `<div style="font-size: 0.875rem; color: #64748b;">${book.author}</div>` : ''}
                 </div>
                 <div class="book-actions">
-                    <button onclick="app.copyISBN('${book.isbn}')" class="icon-btn-sm">📋</button>
-                    <button onclick="app.removeBook(${index})" class="icon-btn-sm">✕</button>
+                    <button onclick="app.copyISBN('${book.isbn}')" class="icon-btn-sm" title="Copy ISBN">📋</button>
+                    <button onclick="app.removeBook(${index})" class="icon-btn-sm" title="Remove">✕</button>
                 </div>
             `;
             this.booksList.appendChild(div);
@@ -316,7 +360,6 @@ class BookScannerApp {
             await navigator.clipboard.writeText(isbn);
             this.showToast('Copied: ' + isbn);
         } catch (error) {
-            // Fallback
             const textarea = document.createElement('textarea');
             textarea.value = isbn;
             document.body.appendChild(textarea);
@@ -431,7 +474,7 @@ class BookScannerApp {
         clearTimeout(this.toastTimeout);
         this.toastTimeout = setTimeout(() => {
             this.toast.classList.remove('show');
-        }, 2000);
+        }, 3000);
     }
 }
 
